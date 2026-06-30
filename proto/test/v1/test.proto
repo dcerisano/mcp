@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package test.v1;
+
+message User {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+message CreateUserResponse {
+  User user = 1;
+}
+
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}

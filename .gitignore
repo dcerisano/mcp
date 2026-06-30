@@ -1,0 +1,23 @@
+models/
+output/
+tools/__pycache__/
+gen/
+.serena/cache/
+.serena/project.local.yml
+.opencode/node_modules/
+# OpenCode
+.opencode/package.json
+.opencode/package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+# Python
+__pycache__/
+*.pyc
+venv/

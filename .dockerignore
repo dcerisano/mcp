@@ -1,0 +1,11 @@
+gen/
+output/
+models/
+tools/__pycache__/
+# src/src/ removed — no longer in tree
+*.pyc
+venv/
+.git/
+.aider*
+.idea/
+.vscode/

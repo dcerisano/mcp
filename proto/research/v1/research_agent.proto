@@ -1,0 +1,406 @@
+// AUTO-GENERATED — DO NOT EDIT.  Modify tools/langgraph_to_proto.py instead.
+// Re-run ./build.sh to regenerate.
+syntax = "proto3";
+
+package research.v1;
+
+import "google/protobuf/struct.proto";
+
+option java_outer_classname = "Mcp";
+
+// Agent: multi-research-agent
+// Tools: web_search_and_analyze, format_and_write
+
+// ---------------------------------------------------------------------------
+// Content types
+// ---------------------------------------------------------------------------
+
+message TextContent {
+  string text = 1;
+}
+
+message ImageContent {
+  string data = 1;
+  string mime_type = 2;
+}
+
+message ResourceContent {
+  string uri = 1;
+  string mime_type = 2;
+  oneof body {
+    string text = 3;
+    bytes blob = 4;
+  }
+}
+
+message Content {
+  oneof kind {
+    TextContent text = 1;
+    ImageContent image = 2;
+    ResourceContent resource = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tool input schemas (generated from LangGraph tool definitions)
+// ---------------------------------------------------------------------------
+
+// Search the web via MCP server and synthesize key facts using LLM sampling.
+message WebSearchAndAnalyzeInput {
+  string query = 1;
+}
+
+// Format content as a structured report using LLM sampling, then write via MCP filesystem server.
+message FormatAndWriteInput {
+  string filename = 1;
+  string content = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Capability types (object-based, per spec 2025-11-25)
+// ---------------------------------------------------------------------------
+
+message ResourcesCapability {
+  bool subscribe = 1;
+  bool list_changed = 2;
+}
+message ToolsCapability {
+  bool list_changed = 1;
+}
+message PromptsCapability {
+  bool list_changed = 1;
+}
+message LoggingCapability {}
+message CompletionsCapability {}
+
+message RootsCapability {
+  bool list_changed = 1;
+}
+message SamplingCapability {
+  bool context = 1;
+  bool tools = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Resources
+// ---------------------------------------------------------------------------
+
+message Resource {
+  string uri = 1;
+  string name = 2;
+  string description = 3;
+  string mime_type = 4;
+}
+
+message ResourceTemplate {
+  string uri_template = 1;
+  string name = 2;
+  string description = 3;
+  string mime_type = 4;
+}
+
+message ListResourcesRequest {
+  string cursor = 1;
+}
+message ListResourcesResponse {
+  repeated Resource resources = 1;
+  string next_cursor = 2;
+}
+
+message ListResourceTemplatesRequest {
+  string cursor = 1;
+}
+message ListResourceTemplatesResponse {
+  repeated ResourceTemplate resource_templates = 1;
+  string next_cursor = 2;
+}
+
+message ReadResourceRequest {
+  string uri = 1;
+}
+message ReadResourceResponse {
+  repeated ResourceContent contents = 1;
+}
+
+message SubscribeResourceRequest {
+  string uri = 1;
+}
+message SubscribeResourceResponse {}
+message UnsubscribeResourceRequest {
+  string uri = 1;
+}
+message UnsubscribeResourceResponse {}
+
+message WatchResourcesRequest {
+  string uri = 1;
+}
+message WatchResourcesResponse {
+  string uri = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Tool RPCs
+// ---------------------------------------------------------------------------
+
+message Tool {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+}
+
+message ListToolsRequest {
+  string cursor = 1;
+}
+message ListToolsResponse {
+  repeated Tool tools = 1;
+  string next_cursor = 2;
+}
+
+message CallToolRequest {
+  string name = 1;
+  google.protobuf.Struct arguments = 2;
+}
+
+message CallToolResponse {
+  repeated Content content = 1;
+  bool is_error = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Prompts
+// ---------------------------------------------------------------------------
+
+message PromptArgument {
+  string name = 1;
+  string description = 2;
+  bool required = 3;
+}
+
+message Prompt {
+  string name = 1;
+  string description = 2;
+  repeated PromptArgument arguments = 3;
+}
+
+message PromptMessage {
+  PromptMessageRole role = 1;
+  Content content = 2;
+}
+
+message ListPromptsRequest {
+  string cursor = 1;
+}
+message ListPromptsResponse {
+  repeated Prompt prompts = 1;
+  string next_cursor = 2;
+}
+
+message GetPromptRequest {
+  string name = 1;
+  map<string, string> arguments = 2;
+}
+message GetPromptResponse {
+  string description = 1;
+  repeated PromptMessage messages = 2;
+}
+
+message CompleteRequest {
+  string prompt_name = 1;
+  string argument_name = 2;
+  string current_value = 3;
+}
+
+message CompleteResponse {
+  repeated string completions = 1;
+  bool has_more = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Server Logging
+// ---------------------------------------------------------------------------
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARNING = 3;
+  LOG_LEVEL_ERROR = 4;
+}
+
+message LogEntry {
+  LogLevel level = 1;
+  string logger = 2;
+  string message = 3;
+}
+
+message LoggingRequest {
+  LogLevel min_level = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace Roots
+// ---------------------------------------------------------------------------
+
+message Root {
+  string uri = 1;
+  string name = 2;
+}
+
+message ListRootsRequest {}
+message ListRootsResponse {
+  repeated Root roots = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Initialization
+// ---------------------------------------------------------------------------
+
+message ClientInfo {
+  string name = 1;
+  string version = 2;
+  string callback_address = 3; // host:port of the client's MCPClientService
+}
+message ServerInfo {
+  string name = 1;
+  string version = 2;
+}
+
+message ClientCapabilities {
+  RootsCapability roots = 1;
+  SamplingCapability sampling = 2;
+}
+message ServerCapabilities {
+  ResourcesCapability resources = 1;
+  ToolsCapability tools = 2;
+  PromptsCapability prompts = 3;
+  LoggingCapability logging = 4;
+  CompletionsCapability completions = 5;
+}
+
+message InitializeRequest {
+  string protocol_version = 1;
+  ClientInfo client_info = 2;
+  ClientCapabilities capabilities = 3;
+}
+
+message InitializeResponse {
+  string protocol_version = 1;
+  ServerInfo server_info = 2;
+  ServerCapabilities capabilities = 3;
+  string instructions = 4;
+}
+
+message PingRequest {}
+message PingResponse {}
+
+// ---------------------------------------------------------------------------
+// Notification infrastructure
+// ---------------------------------------------------------------------------
+
+message CancelledNotification {
+  oneof request_id {
+    string string_id = 1;
+    int64 int_id = 2;
+  }
+  string reason = 3;
+}
+
+message RootsListChangedNotification {}
+message ResourceListChangedNotification {}
+message ToolListChangedNotification {}
+message PromptListChangedNotification {}
+
+message NotifyRequest {
+  oneof notification {
+    CancelledNotification cancelled = 1;
+    InitializedNotification initialized = 2;
+    RootsListChangedNotification roots_list_changed = 3;
+    ResourceListChangedNotification resource_list_changed = 4;
+    ToolListChangedNotification tool_list_changed = 5;
+    PromptListChangedNotification prompt_list_changed = 6;
+  }
+}
+
+message NotifyResponse {}
+
+message InitializedNotification {}
+
+// ---------------------------------------------------------------------------
+// Sampling (client-side LLM inference)
+// ---------------------------------------------------------------------------
+
+enum PromptMessageRole {
+  PROMPT_MESSAGE_ROLE_UNSPECIFIED = 0;
+  PROMPT_MESSAGE_ROLE_USER = 1;
+  PROMPT_MESSAGE_ROLE_ASSISTANT = 2;
+}
+
+enum StopReason {
+  STOP_REASON_UNSPECIFIED = 0;
+  STOP_REASON_END_TURN = 1;
+  STOP_REASON_MAX_TOKENS = 2;
+  STOP_REASON_STOP_SEQUENCE = 3;
+}
+
+message ModelHint {
+  string name = 1;
+}
+message ModelPreferences {
+  repeated ModelHint hints = 1;
+  float cost_priority = 2;
+  float speed_priority = 3;
+  float intelligence_priority = 4;
+}
+
+message SamplingMessage {
+  PromptMessageRole role = 1;
+  Content content = 2;
+}
+
+message CreateMessageRequest {
+  repeated SamplingMessage messages = 1;
+  ModelPreferences model_preferences = 2;
+  string system_prompt = 3;
+  int32 max_tokens = 4;
+  repeated string stop_sequences = 5;
+  float temperature = 6;
+  map<string, string> metadata = 7;
+}
+
+message CreateMessageResponse {
+  PromptMessageRole role = 1;
+  Content content = 2;
+  string model = 3;
+  StopReason stop_reason = 4;
+}
+
+// ---------------------------------------------------------------------------
+// MCPServerService — exposes the tools defined in this agent
+// ---------------------------------------------------------------------------
+
+service MCPServerService {
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc Notify(NotifyRequest) returns (NotifyResponse);
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+  rpc ListResourceTemplates(ListResourceTemplatesRequest) returns (ListResourceTemplatesResponse);
+  rpc ReadResource(ReadResourceRequest) returns (ReadResourceResponse);
+  rpc SubscribeResource(SubscribeResourceRequest) returns (SubscribeResourceResponse);
+  rpc UnsubscribeResource(UnsubscribeResourceRequest) returns (UnsubscribeResourceResponse);
+  rpc WatchResources(WatchResourcesRequest) returns (stream WatchResourcesResponse);
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+  rpc ListPrompts(ListPromptsRequest) returns (ListPromptsResponse);
+  rpc GetPrompt(GetPromptRequest) returns (GetPromptResponse);
+  rpc StreamLogs(LoggingRequest) returns (stream LogEntry);
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+}
+
+// ---------------------------------------------------------------------------
+// MCPClientService — implemented by the client; called by the server for LLM sampling
+// ---------------------------------------------------------------------------
+
+service MCPClientService {
+  rpc CreateMessage(CreateMessageRequest) returns (CreateMessageResponse);
+  rpc ListRoots(ListRootsRequest) returns (ListRootsResponse);
+}

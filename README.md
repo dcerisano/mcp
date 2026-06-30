@@ -1,144 +1,128 @@
-# opencode-token-reduce
+# MCP Multi-Agent Framework
 
-## ⚠️ WORK IN PROGRESS
+## Priming Summary
 
-Contributions, suggestions, and PRs are welcome!
+**Goal:** Framework for building multi-agent systems on Model Context Protocol (MCP) over gRPC. Agent node logic is modeled in Python (LangGraph) and auto-translated to Java wrappers via AST-based code generation. MCP server implementations are written manually in Java — Java's static typing, predictable garbage collection, and thread-safe concurrency primitives make it better suited for deterministic server-side workflows than Python. Primary design goals: deterministic execution, reproducible orchestration, and verifiable tool interactions. Ships with a research-agent demo workflow.
 
-A drop-in [OpenCode](https://opencode.ai) configuration template that reduces AI token usage by pairing **Serena** (efficient code analysis and editing) with **Context7** (live documentation lookup) under strict efficiency rules.
+**Constraints:**
+- Agent node wrappers, proto schemas, and tests are auto-generated from `tools/multi_agent.py` — manual edits to generated files are overwritten on rebuild. MCP server business logic (`impl/*_impl.java`) is written manually in Java
+- Each agent node runs as an independent gRPC server (one port per node), all MCP servers on their own ports
+- LLM inference via HTTP to llama-server (`OllamaClient.java`, 3 retries with linear backoff)
+- Project configuration loaded via `opencode.json`; this README loaded at session start
+- git-crypt encrypts all files except `.gitattributes` and `.gitignore`
 
-Use it as a GitHub template to bootstrap new projects with a pre-configured token-reducing environment. The template is model-agnostic — it works with any LLM backend that OpenCode supports.
+**Progress:**
+- AST-based Python→Java code generation pipeline (`tools/langgraph_to_proto.py`) — supports state access, LLM sampling, tool calls, f-strings, generator expressions, type coercion
+- Proto schema with two MCP services (`MCPServerService`, `MCPClientService`) + `Content` oneof model, published via Buf (`buf.build/perlin/private`)
+- Bidirectional gRPC sampling — MCP servers callback to agent nodes for LLM inference during `CallTool`
+- Abstract base classes: `BaseAgentNode` (agent lifecycle + sampling callback), `GraphRunner` (switch-dispatch loop, configurable max steps)
+- Demo workflow: 3 agents (supervisor, research, writer) using 2 MCP servers (web search, filesystem)
+- Full build pipeline (`build.sh`): clean → generate → buf push → buf generate → compile → test
+- 19 tests across 3 tiers (proto serialization, in-process hermetic, integration with live LLM)
+- Docker build with GPU auto-detection (NVIDIA CUDA, AMD Vulkan, Intel)
 
-## Token Savings
+**Key Decisions:**
+- AST-based Java translation from Python LangGraph — agent node wrappers, proto, and tests generated from the same Python model; MCP server business logic written manually in Java
+- Java for MCP server implementations — Java's static typing, deterministic garbage collection, and thread-safe concurrency primitives eliminate entire classes of runtime errors that Python's dynamic typing and GIL introduce in long-running server processes; Java is better suited for deterministic server-side workflows than Python
+- Deterministic supervisor routing (state-based if/else, not LLM) — avoids LLM failure modes in graph traversal
+- Bidirectional gRPC sampling — MCP servers callback to agents for LLM inference, no polling or webhook infrastructure
+- Distributed agent nodes — each agent independent on its own port, individually deployable/testable
+- Content model uses protobuf oneof (`TextContent`, `ImageContent`, `ResourceContent` wrapped in `Content`)
 
-Serena and Context7 reduce token consumption across every phase of the SDLC by replacing expensive, full-file operations with targeted, semantic queries.
+**Next Steps:**
+- Build and test: `BUF_TOKEN=$BUF_TOKEN ./docker-run.sh`
+- OpenCode commands: `/build` (full pipeline), `/test` (19 tests), `/fix` (loop until green), `/status`
 
-| SDLC Phase | Without | With Serena + Context7 | Est. Savings |
-|---|---|---|---|
-| **Code Comprehension** | Read entire files for relevant symbols | `get_symbols_overview` + `find_symbol` — symbol-level fetch | 60-80% |
-| **Documentation Research** | Read full docs or use stale training data | `context7_query-docs` — versioned API snippets | 70-90% |
-| **Code Editing** | Read full file, rewrite via regex/sed | `replace_symbol_body` / `insert_after_symbol` — symbol-level edit | 40-60% |
-| **Search & Debugging** | grep/glob across codebase, read to understand | `find_referencing_symbols` / `find_implementations` — semantic refs | 50-70% |
-| **Diagnostics** | grep logs, manual bisect | `get_diagnostics_for_file` — LSP diagnostics | 60-80% |
-| **Library/Tool Setup** | Read setup guide, guess config | `context7_query-docs` — version-pinned lookups | 70-90% |
-| **Refactoring** | Find all usages manually, edit each file | `rename_symbol` — single-call rename | 80-90% |
+**Critical Context:**
+- Source of truth: `tools/multi_agent.py` — define agents, graph topology, tools, proto schema, and tests in one Python model
+- Code generator: `tools/langgraph_to_proto.py` — walks Python AST, emits Java + proto + tests
+- Key infrastructure files: `BaseAgentNode.java` (agent base class with sampling), `OllamaClient.java` (LLM HTTP client), `GraphRunner.java` (dispatch loop)
+- Port convention: example workflow uses 11435 (LLM), 50051-50052 (MCP servers), 50053-50056 (agent nodes)
+- Tests generated automatically per workflow; add custom unit tests in `src/test/java/research/v1/`
 
-**Overall projection:** 50-70% fewer tokens consumed over the lifespan of a professional-grade project, with the largest gains in early phases (comprehension, research) and refactoring.
-
----
-
-## Create a New Project from the Template
-
-Create a new empty repository from this GitHub template with a single command:
-
-```bash
-gh repo create my-project --template dcerisano/opencode-token-reduce --public --clone
-cd my-project
-opencode --prompt "startup"
-```
-
-This creates a new repository with the template's full configuration (agents, MCP servers, skills, efficiency rules) and no business code. The project starts clean — ready for OpenCode.
-
-OpenCode launches Serena and Context7, and prompts for the first task with token-reducing defaults in place.
-
----
-
-## Migrate into an Existing Project
-
-To apply the token-reduce template to an existing project, use the `/migrate` command:
+## Build
 
 ```bash
-opencode --prompt "/migrate /path/to/your/project"
+./build.sh          # Full pipeline — GPU detection, Docker orchestration, proto gen, compile, test
 ```
 
-The command copies the template's config files (`opencode.json`, `.opencode/`, `.serena/`) into your project. **If any target file already exists, the command aborts immediately** and shows the full list of conflicting paths so you can resolve them manually. Remove or rename the conflicting files, then run `/migrate` again.
+`./build.sh` handles everything in one script: outside Docker it manages GPU detection, model downloads, and container orchestration; inside Docker it runs proto generation, compilation, and testing.
+
+## Demo Workflow: Multi-Agent Research
+
+The repo ships with a concrete example: a research agent that performs web searches and writes summary files.
+
+### Agent Graph
+
+```
+supervisor ──[research]──> research_agent ──(always)──> supervisor
+supervisor ──[writer]────> writer_agent   ──(always)──> supervisor
+supervisor ──[FINISH]────> __end__
+```
+
+Routing is deterministic: supervisor checks `researchResults` (empty → research), then `writtenFiles` (empty → writer), else FINISH. LLM generates only reasoning text, not routing decisions.
+
+### Demo Port Map
+
+| Port | Component | Protocol |
+|------|-----------|----------|
+| 11435 | llama-server | HTTP (OpenAI-compatible) |
+| 50051 | WebSearch MCP Server | gRPC `MCPServerService` |
+| 50052 | Filesystem MCP Server | gRPC `MCPServerService` |
+| 50053 | Supervisor Node | gRPC `MCPClientService` |
+| 50055 | ResearchAgent Node | gRPC `MCPClientService` |
+| 50056 | WriterAgent Node | gRPC `MCPClientService` |
+
+### Demo MCP Servers
+
+| File(s) | Tools | Backend |
+|---------|-------|---------|
+| `impl/web_search_impl.java` (manual) + generated wrapper | `web_search` | DuckDuckGo Instant Answer API + HTML fallback |
+| `impl/filesystem_impl.java` (manual) + generated wrapper | `write_file`, `read_file`, `list_files` | File I/O with path traversal protection |
+
+### Demo Agent Nodes
+
+| File | Role |
+|------|------|
+| `SupervisorNode.java` | Deterministic router: research → writer → FINISH. LLM generates reasoning text. |
+| `ResearchAgentNode.java` | LLM generates search query, calls `web_search`, stores results. |
+| `WriterAgentNode.java` | LLM drafts content, calls `write_file`, records filename. |
 
 ---
 
-## Installation
+## Orchestration Log (`output/message.log`)
 
-### Linux
-
-```bash
-# GitHub CLI
-sudo apt install gh          # Debian/Ubuntu
-
-# OpenCode
-curl -fsSL https://opencode.ai/install | bash
-
-# uvx (Serena dependency)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Context7 API key (get one at https://context7.com)
-export CONTEXT7_API_KEY="your_key_here"
-
-# Quick startup alias
-alias oc='opencode --prompt "startup"'
-
-# Create a new project from this template
-gh repo create my-project --template dcerisano/opencode-token-reduce --public --clone
-cd my-project
-oc
-```
-
-### Windows
-
-```powershell
-# GitHub CLI
-winget install --id GitHub.cli
-
-# OpenCode
-winget install opencode
-
-# uvx (Serena dependency)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Context7 API key (get one at https://context7.com)
-$env:CONTEXT7_API_KEY = "your_key_here"
-
-# Quick startup alias
-function oc { opencode --prompt "startup" }
-
-# Create a new project from this template
-gh repo create my-project --template dcerisano/opencode-token-reduce --public --clone
-cd my-project
-oc
-```
-
-The Serena and Context7 MCP servers are configured in the root `opencode.json` and launch automatically on startup. The Serena web dashboard is available at [http://127.0.0.1:24282/dashboard/index.html](http://127.0.0.1:24282/dashboard/index.html) (auto-launch is disabled to avoid unnecessary tray/browser windows).
-
----
-
-## Tech Stack
-
-### OpenCode
-
-[OpenCode](https://opencode.ai) handles model selection, MCP server orchestration, agent definitions with granular permission scopes, skill loading, and command templates.
-
-### Serena
-
-[Serena](https://oraios.github.io/serena/) replaces native read/write/grep/glob with semantic operations — symbol search, targeted body replacement, diagnostics retrieval, and batch reads — reducing context per tool call.
-
-### Context7
-
-[Context7](https://context7.com) resolves library names to IDs and returns up-to-date API references and code examples, eliminating reliance on stale training data.
-
----
-
-## File Layout
+Every integration test suite produces a structured trace at `output/integration-message.log` (or `output/mcp-message.log` for the HTTP transport test) with entries in this format:
 
 ```
-opencode-token-reduce/
-├── opencode.json                 # Main config: MCP servers, agents, LSP, permissions
-├── .opencode/
-│   ├── .gitignore                # Ignores node_modules/, package*.json, bun.lock
-│   ├── commands/
-│   │   └── migrate.md            # /migrate — merge template into existing project
-│   └── skills/
-│       └── memory-management/
-│           └── SKILL.md
-├── .serena/
-│   ├── .gitignore                # Ignores /cache, /project.local.yml
-│   └── memories/
-│       └── .gitkeep              # Memory file storage
-└── README.md
+[#001] 2026-06-18T14:30:00Z    AGENT:orchestrator    TOOL:web_search        web_searchRequest
+[#002] 2026-06-18T14:30:01Z    TOOL:web_search      AGENT:orchestrator     web_searchResponse
+[#003] 2026-06-18T14:30:02Z    AGENT:orchestrator    LLM                   Prompt
+[#004] 2026-06-18T14:30:05Z    LLM                   AGENT:orchestrator     Result
 ```
+
+The six columns: `[sequence]  timestamp  source  target  action  [detail]`. Sources and targets use normalized names (`AGENT:orchestrator`, `TOOL:web_search`, `LLM`).
+
+This log is sufficient to render a **complete swim lane diagram** of any orchestration run — every agent-to-agent handoff, tool invocation, and LLM sampling round-trip is recorded in order. Workflow and tool designers use it to verify that a given orchestration is deterministic and reproducible across runs.
+
+## Technology Stack
+
+| Technology | Version | Role |
+|-----------|---------|------|
+| Amazon Corretto JDK | 21 | Java runtime |
+| gRPC Java | 1.82.1 | RPC framework |
+| Protobuf | 4.35.1 | Serialization |
+| llama.cpp | b9837 | LLM inference |
+| Qwen2.5-14B | Q4_K_M GGUF | Language model |
+| Buf CLI | 1.71.0 | Proto registry + codegen |
+| JUnit 5 | 6.1.0 | Testing |
+| Python 3 | — | Code generation |
+
+## Key Design Patterns
+
+- **Single source of truth**: One Python model generates agent node wrappers, proto schemas, and tests per workflow; MCP server business logic is written manually in Java
+- **AST-based translation**: Python function AST → semantically equivalent Java wrappers, no templates or string generation
+- **Bidirectional gRPC**: MCP servers callback to agents for LLM sampling — push model, no polling
+- **Deterministic routing**: Graph traversal uses state-based routing, not LLM decisions — reliable and testable
+- **Distributed agent nodes**: Each agent is an independent gRPC server, individually deployable and scalable
+- **Context propagation**: gRPC interceptor carries agent identity across service boundaries

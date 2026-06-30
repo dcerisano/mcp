@@ -1,0 +1,8 @@
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/java:v35.1
+    out: gen/java
+  - remote: buf.build/grpc/java:v1.82.1
+    out: gen/java
+inputs:
+  - directory: proto
