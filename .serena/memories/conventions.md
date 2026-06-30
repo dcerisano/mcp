@@ -11,6 +11,13 @@
 - Prompt engineering: constrained prompts drastically reduce LLM latency. Use format/length constraints in system prompts (e.g. "Reply with ONE word", "Write 3-5 sentences"). Avoid open-ended instructions like "Explain" or "Write a summary" — they produce verbose completions. Set `max_tokens` per call: routing/query calls need 16-256, generation calls need 1024-2048.
 - `OllamaClient`: HTTP client has 10s connect timeout, 2 retry attempts (down from 3), 500ms base delay (down from 1000ms).
 
+## Transport
+- **Dual transport convention:** All MCP servers expose both gRPC and HTTP/JSON-RPC surfaces. gRPC is the production path; HTTP is for dev/debugging and browser-facing endpoints.
+- **HTTP handlers** extend `McpHttpHandler` (abstract base implementing `HttpHandler`) — Gson only, no protobuf
+- **gRPC servers** extend generated `MCPServerServiceImplBase` — protobuf messages
+- Both call the same underlying tool classes (`WebSearchTool`, `FilesystemTool`)
+- Agent nodes use HTTP-first for tool calls (with gRPC fallback) and gRPC-only for sampling (LLM)
+
 ## Java
 - Package: `research.v1` (all sources, tests, generated code)
 - Build output directory: `gen/` (Java stubs in `gen/java/`, compiled classes in `gen/classes/`, `gen/main-classes/`, `gen/test-classes/`)

@@ -39,8 +39,16 @@
 - Orchestrator final `Complete` logged in GraphRunner when supervisor reaches `__end__`
 
 ## Architecture
-- Distributed agent nodes — each agent is independent gRPC server, individually deployable/testable
-- Bidirectional MCP — tools callback to agents for LLM sampling (HTTP path: handler logs TOOL→AGENT Sampling)
+- Distributed agent nodes — each agent is independent server, individually deployable/testable
+- **Dual transport:** JSON-RPC/HTTP and gRPC are independent parallel implementations of the MCP protocol, both sharing the same business logic (`WebSearchTool`, `FilesystemTool`). HTTP does NOT wrap gRPC.
+  - `McpHttpHandler` — base class for HTTP/JSON-RPC surface. Handles `initialize`, `tools/list`, `tools/call`, `sampling/createMessage`, `ping`, notifications, and resource templates. Uses Gson exclusively — no protobuf.
+  - gRPC servers extend `MCPServerServiceImplBase` (generated). Uses protobuf.
+- **Sampling (LLM calls):**
+  - HTTP path: `McpHttpHandler.handleSampling()` calls `OllamaClient.call()` directly — no agent callback needed
+  - gRPC path: generated `BaseAgentNode.createMessage()` handles gRPC CreateMessage for agent's own sampling; MCP server impls call back to agent via `samplingClient`
+- **Agent node tool calls:** HTTP-first with gRPC fallback (generated code tries `jsonRpcRequest()` to HTTP server, falls back to gRPC stub on failure)
+- **Agent node sampling:** gRPC-only (generated `sample()` calls `samplingStub.createMessage()` via MCPClientService gRPC)
+- **Production targets distributed cloud deployment** — gRPC+protobuf preferred for agent-to-agent and agent-to-tool (smaller wire, HTTP/2 multiplexed, native streaming). HTTP/JSON-RPC surface is for dev/debugging and browser-facing frontends.
 - State-based supervisor routing with LLM reasoning for agent selection
 - Proto `Content` model uses oneof (TextContent, ImageContent, ResourceContent)
 
